@@ -30,6 +30,23 @@ function M.show()
   -- Set up save callback
   notepad.on_save = M.save
   
+  -- Check if there are unsaved changes to restore
+  if notepad.has_unsaved_content() then
+    local unsaved_content = notepad.get_unsaved_content()
+    local lines = vim.split(unsaved_content, "\n", { plain = true })
+    vim.schedule(function()
+      if M.state.bufnr and vim.api.nvim_buf_is_valid(M.state.bufnr) then
+        -- Use the proper API that handles change tracking
+        notepad.restore_unsaved_content(lines)
+      end
+    end)
+    vim.notify("Restored unsaved changes", vim.log.levels.INFO)
+    return
+  end
+  
+  -- Disable change tracking for initial load sequence
+  notepad.set_ignore_changes(true)
+  
   -- Start animated spinner
   ui.start_spinner("Loading from Pantry", function(frame)
     if M.state.bufnr and vim.api.nvim_buf_is_valid(M.state.bufnr) then
@@ -106,6 +123,8 @@ function M.save()
     if success then
       vim.notify("Saved successfully", vim.log.levels.INFO)
       M.state.last_error = nil
+      -- Mark content as saved in notepad
+      notepad.mark_as_saved()
     else
       M.state.last_error = err
       vim.notify("Save failed: " .. (err or "unknown error"), vim.log.levels.ERROR)
