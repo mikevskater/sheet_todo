@@ -4,6 +4,27 @@ local config = require('sheet_todo.config')
 
 local M = {}
 
+-- Base64 encode content to avoid JSON escape sequence issues
+local function encode_content(content)
+  if not content or content == "" then
+    return ""
+  end
+  return vim.base64.encode(content)
+end
+
+-- Base64 decode content back to original string
+local function decode_content(encoded)
+  if not encoded or encoded == "" then
+    return ""
+  end
+  local ok, decoded = pcall(vim.base64.decode, encoded)
+  if not ok then
+    -- If decoding fails, return raw string (handles pre-encoding data)
+    return encoded
+  end
+  return decoded
+end
+
 -- Pantry API endpoint
 local PANTRY_BASE_URL = "https://getpantry.cloud/apiv1/pantry"
 
@@ -54,9 +75,11 @@ function M.get_content(callback)
       return
     end
     
-    -- Ensure content exists
+    -- Ensure content exists and decode from base64
     if not data.content then
       data.content = ""
+    else
+      data.content = decode_content(data.content)
     end
     if not data.cursor_pos then
       data.cursor_pos = { line = 1, col = 0 }
@@ -76,7 +99,7 @@ function M.save_content(content, cursor_pos, callback)
   local url = get_basket_url()
   
   local payload = {
-    content = content,
+    content = encode_content(content),
     cursor_pos = cursor_pos or { line = 1, col = 0 },
     last_modified = os.time()
   }
