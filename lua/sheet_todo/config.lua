@@ -15,6 +15,9 @@ local defaults = {
   split_height_percent = 25,
   spinner_frames = {"⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"},
   
+  -- Float window provider
+  use_nvim_float = true,  -- Use nvim-float if available (false = always raw API)
+
   -- Behavior
   auto_refresh = false,  -- Auto-refresh todos periodically
   refresh_interval_ms = 30000,  -- 30 seconds

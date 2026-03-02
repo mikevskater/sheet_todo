@@ -1,94 +1,74 @@
 -- Floating notepad buffer management
 local M = {}
 
+local float_provider = require('sheet_todo.float_provider')
+
 -- State
 local state = {
   buf = nil,
   win = nil,
+  float_win = nil,          -- FloatWindow instance (nil in raw mode)
   is_open = false,
   -- Saved state tracking
   saved_content = nil,        -- Last saved content from cloud
   unsaved_content = nil,      -- Unsaved local changes
   has_unsaved_changes = false,
   ignore_changes = false,     -- Flag to ignore buffer changes during initial load
-  resize_autocmd_id = nil,    -- Autocmd ID for window resize
+  resize_autocmd_id = nil,    -- Autocmd ID for window resize (raw mode only)
 }
 
 local float_title = ' Notes '
 local unsaved_marker = '●'
 
--- Create floating window
-function M.create_float()
-  -- Reset unsaved changes state on fresh open (will be set to true if restoring unsaved content)
-  if not state.is_open then
-    state.has_unsaved_changes = false
+-- Build the title string based on unsaved state
+local function get_title()
+  if state.has_unsaved_changes then
+    return unsaved_marker .. float_title
   end
-  
-  -- Get editor dimensions
-  local width = vim.o.columns
-  local height = vim.o.lines
-  
-  -- Calculate floating window size (80% of screen)
-  local win_width = math.floor(width * 0.8)
-  local win_height = math.floor(height * 0.8)
-  
-  -- Calculate position (centered)
-  local row = math.floor((height - win_height) / 2)
-  local col = math.floor((width - win_width) / 2)
-  
-  -- Create buffer if it doesn't exist
-  if not state.buf or not vim.api.nvim_buf_is_valid(state.buf) then
-    state.buf = vim.api.nvim_create_buf(false, true) -- not listed, scratch
-    vim.api.nvim_buf_set_option(state.buf, 'buftype', 'nofile')
-    vim.api.nvim_buf_set_option(state.buf, 'filetype', 'markdown')
-  end
+  return float_title
+end
 
-  -- Window options  
-  local opts = {
-    relative = 'editor',
-    width = win_width,
-    height = win_height,
-    row = row,
-    col = col,
-    style = 'minimal',
-    border = 'rounded',
-    title = state.has_unsaved_changes and (unsaved_marker .. float_title) or float_title,
-    title_pos = 'center',
-  }
-  
-  -- Create window
-  state.win = vim.api.nvim_open_win(state.buf, true, opts)
-  state.is_open = true
-  
-  -- Window options
-  vim.api.nvim_win_set_option(state.win, 'wrap', true)
-  vim.api.nvim_win_set_option(state.win, 'linebreak', true)
-  
-  -- Set buffer keymaps
-  local keymap_opts = { buffer = state.buf, nowait = true, silent = true }
-  
-  -- Close on <Esc> in normal mode
+-- Set up buffer-local keymaps (raw mode only; nvim-float mode uses config.keymaps)
+local function setup_raw_keymaps(buf)
+  local keymap_opts = { buffer = buf, nowait = true, silent = true }
+
   vim.keymap.set('n', '<Esc>', function()
     M.close()
   end, keymap_opts)
-  
-  -- Close on 'q' in normal mode
+
   vim.keymap.set('n', 'q', function()
     M.close()
   end, keymap_opts)
-  
-  -- Revert unsaved changes on <A-r>
+
   vim.keymap.set('n', '<A-r>', function()
     M.revert_unsaved_changes()
   end, keymap_opts)
-  
-  -- Save on Ctrl+S
-  vim.keymap.set({'n', 'i'}, '<C-s>', function()
+
+  vim.keymap.set({ 'n', 'i' }, '<C-s>', function()
     M.save()
   end, keymap_opts)
-  
-  -- Track buffer changes to detect unsaved edits
-  vim.api.nvim_buf_attach(state.buf, false, {
+end
+
+-- Build keymaps table for nvim-float mode
+local function build_nvim_float_keymaps()
+  return {
+    ['<Esc>'] = function() M.close() end,
+    ['q'] = function() M.close() end,
+    ['<A-r>'] = function() M.revert_unsaved_changes() end,
+  }
+end
+
+-- Set up keymaps that require multi-mode (insert + normal) separately
+-- nvim-float only sets normal mode keymaps, so we add insert mode manually
+local function setup_insert_keymaps(buf)
+  vim.keymap.set('i', '<C-s>', function()
+    M.save()
+  end, { buffer = buf, nowait = true, silent = true })
+end
+
+-- Attach change tracking to the buffer
+local function attach_change_tracking(buf)
+  vim.api.nvim_buf_attach(buf, false, {
     on_lines = function()
       if state.ignore_changes then
         return
@@ -98,17 +78,63 @@ function M.create_float()
       end)
     end,
   })
-  
-  -- Set up resize autocmd
-  if state.resize_autocmd_id then
-    vim.api.nvim_del_autocmd(state.resize_autocmd_id)
+end
+
+-- Create floating window
+function M.create_float()
+  -- Reset unsaved changes state on fresh open (will be set to true if restoring unsaved content)
+  if not state.is_open then
+    state.has_unsaved_changes = false
   end
-  state.resize_autocmd_id = vim.api.nvim_create_autocmd('VimResized', {
-    callback = function()
-      M.resize_window()
+
+  -- Build nvim-float keymaps (includes <C-s> for normal mode)
+  local nf_keymaps = build_nvim_float_keymaps()
+  nf_keymaps['<C-s>'] = function() M.save() end
+
+  -- Create float via provider
+  local buf, win, float_win = float_provider.create_float({
+    title = get_title(),
+    keymaps = nf_keymaps,
+    on_close = function()
+      -- Store unsaved content before nvim-float wipes the buffer
+      if state.has_unsaved_changes and state.buf and vim.api.nvim_buf_is_valid(state.buf) then
+        state.unsaved_content = M.get_content()
+      end
+      state.win = nil
+      state.buf = nil
+      state.float_win = nil
+      state.is_open = false
     end,
   })
-  
+
+  state.buf = buf
+  state.win = win
+  state.float_win = float_win
+  state.is_open = true
+
+  -- In raw mode, set keymaps directly on the buffer
+  if not float_win then
+    setup_raw_keymaps(buf)
+  end
+
+  -- Insert-mode keymaps need to be set directly regardless of provider
+  setup_insert_keymaps(buf)
+
+  -- Track buffer changes to detect unsaved edits
+  attach_change_tracking(buf)
+
+  -- Set up resize autocmd (raw mode only; nvim-float handles this internally)
+  if not float_win then
+    if state.resize_autocmd_id then
+      vim.api.nvim_del_autocmd(state.resize_autocmd_id)
+    end
+    state.resize_autocmd_id = vim.api.nvim_create_autocmd('VimResized', {
+      callback = function()
+        M.resize_window()
+      end,
+    })
+  end
+
   return state.buf, state.win
 end
 
@@ -117,23 +143,23 @@ function M.set_content(lines)
   if not state.buf or not vim.api.nvim_buf_is_valid(state.buf) then
     return
   end
-  
+
   -- Ignore buffer changes during initial content load
   state.ignore_changes = true
-  
+
   -- Make buffer modifiable
   vim.api.nvim_buf_set_option(state.buf, 'modifiable', true)
-  
+
   -- Set lines
   vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, lines)
-  
+
   -- Mark as not modified
   vim.api.nvim_buf_set_option(state.buf, 'modified', false)
-  
+
   -- Store as saved content
   state.saved_content = table.concat(lines, "\n")
   state.has_unsaved_changes = false
-  
+
   -- Re-enable change tracking after a short delay
   vim.schedule(function()
     state.ignore_changes = false
@@ -145,7 +171,7 @@ function M.get_content()
   if not state.buf or not vim.api.nvim_buf_is_valid(state.buf) then
     return ""
   end
-  
+
   local lines = vim.api.nvim_buf_get_lines(state.buf, 0, -1, false)
   return table.concat(lines, "\n")
 end
@@ -155,12 +181,12 @@ function M.set_cursor(line, col)
   if not state.win or not vim.api.nvim_win_is_valid(state.win) then
     return
   end
-  
+
   -- Clamp to valid position
   local total_lines = vim.api.nvim_buf_line_count(state.buf)
   line = math.max(1, math.min(line, total_lines))
-  
-  vim.api.nvim_win_set_cursor(state.win, {line, col})
+
+  vim.api.nvim_win_set_cursor(state.win, { line, col })
 end
 
 -- Get cursor position
@@ -168,7 +194,7 @@ function M.get_cursor()
   if not state.win or not vim.api.nvim_win_is_valid(state.win) then
     return { line = 1, col = 0 }
   end
-  
+
   local pos = vim.api.nvim_win_get_cursor(state.win)
   return { line = pos[1], col = pos[2] }
 end
@@ -177,19 +203,17 @@ end
 function M.close()
   -- Store current content if there are unsaved changes
   if state.buf and vim.api.nvim_buf_is_valid(state.buf) then
-    local current_content = M.get_content()
     if state.has_unsaved_changes then
-      state.unsaved_content = current_content
+      state.unsaved_content = M.get_content()
     end
   end
-  
-  if state.win and vim.api.nvim_win_is_valid(state.win) then
-    vim.api.nvim_win_close(state.win, true)
-  end
+
+  float_provider.close(state.win, state.float_win)
   state.win = nil
+  state.float_win = nil
   state.is_open = false
-  
-  -- Clean up resize autocmd
+
+  -- Clean up resize autocmd (raw mode only)
   if state.resize_autocmd_id then
     vim.api.nvim_del_autocmd(state.resize_autocmd_id)
     state.resize_autocmd_id = nil
@@ -207,7 +231,7 @@ function M.show_loading()
     vim.api.nvim_buf_set_option(state.buf, 'modifiable', true)
     vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, {
       "",
-      "  ⏳ Loading from cloud...",
+      "  Loading from cloud...",
       ""
     })
     vim.api.nvim_buf_set_option(state.buf, 'modifiable', false)
@@ -228,17 +252,17 @@ function M.update_unsaved_state()
   if not state.buf or not vim.api.nvim_buf_is_valid(state.buf) then
     return
   end
-  
+
   local current_content = M.get_content()
   local prev_unsaved_state = state.has_unsaved_changes
-  
+
   -- Check if content differs from saved content
   if state.saved_content then
     state.has_unsaved_changes = (current_content ~= state.saved_content)
   else
     state.has_unsaved_changes = (#current_content > 0)
   end
-  
+
   -- Update window title if state changed
   if prev_unsaved_state ~= state.has_unsaved_changes and state.win and vim.api.nvim_win_is_valid(state.win) then
     M.update_window_title()
@@ -250,11 +274,8 @@ function M.update_window_title()
   if not state.win or not vim.api.nvim_win_is_valid(state.win) then
     return
   end
-  
-  vim.api.nvim_win_set_config(state.win, {
-    title = state.has_unsaved_changes and (unsaved_marker .. float_title) or float_title,
-    title_pos = 'center',
-  })
+
+  float_provider.update_title(state.win, state.float_win, get_title())
 end
 
 -- Revert to last saved content
@@ -263,21 +284,21 @@ function M.revert_unsaved_changes()
     vim.notify("No saved content to revert to", vim.log.levels.WARN)
     return
   end
-  
+
   -- Restore saved content
   local lines = vim.split(state.saved_content, "\n", { plain = true })
-  
+
   if state.buf and vim.api.nvim_buf_is_valid(state.buf) then
     vim.api.nvim_buf_set_option(state.buf, 'modifiable', true)
     vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, lines)
     vim.api.nvim_buf_set_option(state.buf, 'modified', false)
   end
-  
+
   -- Clear unsaved changes
   state.unsaved_content = nil
   state.has_unsaved_changes = false
   M.update_window_title()
-  
+
   vim.notify("Reverted to last saved content", vim.log.levels.INFO)
 end
 
@@ -312,14 +333,14 @@ function M.restore_unsaved_content(lines)
   if not state.buf or not vim.api.nvim_buf_is_valid(state.buf) then
     return
   end
-  
+
   -- Temporarily disable change tracking
   state.ignore_changes = true
-  
+
   vim.api.nvim_buf_set_option(state.buf, 'modifiable', true)
   vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, lines)
   vim.api.nvim_buf_set_option(state.buf, 'modified', true)
-  
+
   -- Re-enable change tracking and mark as having unsaved changes
   vim.schedule(function()
     state.ignore_changes = false
@@ -330,30 +351,7 @@ end
 
 -- Resize window when terminal is resized
 function M.resize_window()
-  if not state.win or not vim.api.nvim_win_is_valid(state.win) then
-    return
-  end
-  
-  -- Get new editor dimensions
-  local width = vim.o.columns
-  local height = vim.o.lines
-  
-  -- Calculate new floating window size (80% of screen)
-  local win_width = math.floor(width * 0.8)
-  local win_height = math.floor(height * 0.8)
-  
-  -- Calculate new position (centered)
-  local row = math.floor((height - win_height) / 2)
-  local col = math.floor((width - win_width) / 2)
-  
-  -- Update window configuration
-  vim.api.nvim_win_set_config(state.win, {
-    relative = 'editor',
-    width = win_width,
-    height = win_height,
-    row = row,
-    col = col,
-  })
+  float_provider.resize(state.win, state.float_win)
 end
 
 return M

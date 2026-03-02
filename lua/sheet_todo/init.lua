@@ -4,6 +4,7 @@ local notepad = require('sheet_todo.notepad')
 local pantry = require('sheet_todo.pantry')
 local config = require('sheet_todo.config')
 local ui = require('sheet_todo.ui')
+local float_provider = require('sheet_todo.float_provider')
 
 -- State tracking
 M.state = {
@@ -134,9 +135,7 @@ end
 
 -- Close the notepad
 function M.close()
-  if M.state.winnr and vim.api.nvim_win_is_valid(M.state.winnr) then
-    vim.api.nvim_win_close(M.state.winnr, true)
-  end
+  notepad.close()
   M.state.winnr = nil
   M.state.bufnr = nil
 end
@@ -150,6 +149,7 @@ function M.status()
     "Configuration:",
     "  Pantry ID: " .. (config.get('pantry_id') or "NOT SET"),
     "  Basket: " .. (config.get('basket_name') or "NOT SET"),
+    "  Float Provider: " .. (float_provider.has_nvim_float() and "nvim-float" or "raw"),
     "",
     "State:",
     "  Buffer: " .. (M.state.bufnr and "active" or "inactive"),
@@ -175,14 +175,9 @@ end
 -- Setup function
 function M.setup(opts)
   opts = opts or {}
-  
-  -- Update config with user options
-  if opts.pantry_id then
-    config.set('pantry_id', opts.pantry_id)
-  end
-  if opts.basket_name then
-    config.set('basket_name', opts.basket_name)
-  end
+
+  -- Initialize config with all user options
+  config.setup(opts)
   
   -- Register commands
   vim.api.nvim_create_user_command('TodoShow', M.show, {})
