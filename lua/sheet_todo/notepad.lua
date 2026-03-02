@@ -2,6 +2,8 @@
 local M = {}
 
 local float_provider = require('sheet_todo.float_provider')
+local cfg = require('sheet_todo.config')
+local hide_completed = require('sheet_todo.features.hide_completed')
 
 -- State
 local state = {
@@ -28,42 +30,86 @@ local function get_title()
   return float_title
 end
 
--- Set up buffer-local keymaps (raw mode only; nvim-float mode uses config.keymaps)
-local function setup_raw_keymaps(buf)
-  local keymap_opts = { buffer = buf, nowait = true, silent = true }
+-- Action handlers table (action name -> function)
+local actions = {
+  close = function() M.close() end,
+  save = function() M.save() end,
+  revert = function() M.revert_unsaved_changes() end,
+  toggle_completed = function()
+    if state.buf and vim.api.nvim_buf_is_valid(state.buf) then
+      hide_completed.toggle(state.buf)
+    end
+  end,
+}
 
-  vim.keymap.set('n', '<Esc>', function()
-    M.close()
-  end, keymap_opts)
-
-  vim.keymap.set('n', 'q', function()
-    M.close()
-  end, keymap_opts)
-
-  vim.keymap.set('n', '<A-r>', function()
-    M.revert_unsaved_changes()
-  end, keymap_opts)
-
-  vim.keymap.set({ 'n', 'i' }, '<C-s>', function()
-    M.save()
-  end, keymap_opts)
+---Format a key or key table for display in controls
+---@param k string|string[]
+---@return string
+local function fmt_key(k)
+  if type(k) == 'table' then return table.concat(k, ' / ') end
+  return k
 end
 
--- Build keymaps table for nvim-float mode
+-- Build keymaps table for nvim-float mode from config
 local function build_nvim_float_keymaps()
-  return {
-    ['<Esc>'] = function() M.close() end,
-    ['q'] = function() M.close() end,
-    ['<A-r>'] = function() M.revert_unsaved_changes() end,
-  }
+  local km = cfg.get('keymaps')
+  local result = {}
+  for action_name, keys in pairs(km) do
+    local handler = actions[action_name]
+    if handler then
+      if type(keys) == 'table' then
+        for _, key in ipairs(keys) do
+          result[key] = handler
+        end
+      else
+        result[keys] = handler
+      end
+    end
+  end
+  return result
 end
 
--- Set up keymaps that require multi-mode (insert + normal) separately
--- nvim-float only sets normal mode keymaps, so we add insert mode manually
+-- Set buffer-local keymaps for raw mode from config
+local function setup_buffer_keymaps(buf)
+  local km = cfg.get('keymaps')
+  local opts = { buffer = buf, nowait = true, silent = true }
+  for action_name, keys in pairs(km) do
+    local handler = actions[action_name]
+    if handler then
+      if type(keys) == 'table' then
+        for _, key in ipairs(keys) do
+          vim.keymap.set('n', key, handler, opts)
+        end
+      else
+        vim.keymap.set('n', keys, handler, opts)
+      end
+    end
+  end
+end
+
+-- Set up insert-mode save keymap (both modes need this)
 local function setup_insert_keymaps(buf)
-  vim.keymap.set('i', '<C-s>', function()
-    M.save()
-  end, { buffer = buf, nowait = true, silent = true })
+  local save_key = cfg.get('keymaps').save or '<C-s>'
+  if type(save_key) == 'table' then save_key = save_key[1] end
+  vim.keymap.set('i', save_key, actions.save, { buffer = buf, nowait = true, silent = true })
+end
+
+-- Build controls array for nvim-float's "? = Controls" footer
+local function build_controls()
+  local km = cfg.get('keymaps')
+  return {
+    { header = "Editing", keys = {
+      { key = fmt_key(km.save), desc = "Save to cloud" },
+      { key = fmt_key(km.revert), desc = "Revert to saved" },
+    }},
+    { header = "View", keys = {
+      { key = fmt_key(km.toggle_completed), desc = "Hide/show completed" },
+    }},
+    { header = "Window", keys = {
+      { key = fmt_key(km.close), desc = "Close" },
+      { key = "?", desc = "Show controls" },
+    }},
+  }
 end
 
 -- Attach change tracking to the buffer
@@ -87,19 +133,24 @@ function M.create_float()
     state.has_unsaved_changes = false
   end
 
-  -- Build nvim-float keymaps (includes <C-s> for normal mode)
-  local nf_keymaps = build_nvim_float_keymaps()
-  nf_keymaps['<C-s>'] = function() M.save() end
+  local keymaps = build_nvim_float_keymaps()
+  local controls = build_controls()
 
   -- Create float via provider
   local buf, win, float_win = float_provider.create_float({
     title = get_title(),
-    keymaps = nf_keymaps,
+    keymaps = keymaps,
+    controls = controls,
     on_close = function()
       -- Store unsaved content before nvim-float wipes the buffer
       if state.has_unsaved_changes and state.buf and vim.api.nvim_buf_is_valid(state.buf) then
-        state.unsaved_content = M.get_content()
+        if hide_completed.is_active() then
+          state.unsaved_content = hide_completed.get_full_content(state.buf)
+        else
+          state.unsaved_content = M.get_content()
+        end
       end
+      hide_completed.reset()
       state.win = nil
       state.buf = nil
       state.float_win = nil
@@ -114,10 +165,10 @@ function M.create_float()
 
   -- In raw mode, set keymaps directly on the buffer
   if not float_win then
-    setup_raw_keymaps(buf)
+    setup_buffer_keymaps(buf)
   end
 
-  -- Insert-mode keymaps need to be set directly regardless of provider
+  -- Insert-mode save keymap needs to be set directly regardless of provider
   setup_insert_keymaps(buf)
 
   -- Track buffer changes to detect unsaved edits
@@ -176,6 +227,14 @@ function M.get_content()
   return table.concat(lines, "\n")
 end
 
+-- Get full content including hidden completed tasks (for saving)
+function M.get_full_content()
+  if hide_completed.is_active() then
+    return hide_completed.get_full_content(state.buf)
+  end
+  return M.get_content()
+end
+
 -- Set cursor position
 function M.set_cursor(line, col)
   if not state.win or not vim.api.nvim_win_is_valid(state.win) then
@@ -204,10 +263,15 @@ function M.close()
   -- Store current content if there are unsaved changes
   if state.buf and vim.api.nvim_buf_is_valid(state.buf) then
     if state.has_unsaved_changes then
-      state.unsaved_content = M.get_content()
+      if hide_completed.is_active() then
+        state.unsaved_content = hide_completed.get_full_content(state.buf)
+      else
+        state.unsaved_content = M.get_content()
+      end
     end
   end
 
+  hide_completed.reset()
   float_provider.close(state.win, state.float_win)
   state.win = nil
   state.float_win = nil
@@ -284,6 +348,9 @@ function M.revert_unsaved_changes()
     vim.notify("No saved content to revert to", vim.log.levels.WARN)
     return
   end
+
+  -- Reset hide state before reverting (show all lines)
+  hide_completed.reset()
 
   -- Restore saved content
   local lines = vim.split(state.saved_content, "\n", { plain = true })

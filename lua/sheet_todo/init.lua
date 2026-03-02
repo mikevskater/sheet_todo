@@ -111,8 +111,8 @@ function M.save()
     return
   end
   
-  -- Get current content and cursor position
-  local content = notepad.get_content()
+  -- Get current content (including hidden completed tasks) and cursor position
+  local content = notepad.get_full_content()
   local cursor_pos = notepad.get_cursor()
   
   M.state.saving = true

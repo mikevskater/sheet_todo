@@ -18,6 +18,14 @@ local defaults = {
   -- Float window provider
   use_nvim_float = true,  -- Use nvim-float if available (false = always raw API)
 
+  -- Keymaps (customizable key bindings)
+  keymaps = {
+    close = { '<Esc>', 'q' },
+    save = '<C-s>',
+    revert = '<A-r>',
+    toggle_completed = '<leader>h',
+  },
+
   -- Behavior
   auto_refresh = false,  -- Auto-refresh todos periodically
   refresh_interval_ms = 30000,  -- 30 seconds
