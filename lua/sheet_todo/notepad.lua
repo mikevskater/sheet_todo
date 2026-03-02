@@ -30,6 +30,32 @@ local function get_title()
   return float_title
 end
 
+-- Jump cursor to the next unchecked todo, wrapping around
+local function jump_to_next_todo()
+  if not state.buf or not vim.api.nvim_buf_is_valid(state.buf) then
+    return
+  end
+  if not state.win or not vim.api.nvim_win_is_valid(state.win) then
+    return
+  end
+
+  local lines = vim.api.nvim_buf_get_lines(state.buf, 0, -1, false)
+  local cursor = vim.api.nvim_win_get_cursor(state.win)
+  local current_line = cursor[1] -- 1-indexed
+  local total = #lines
+
+  -- Search forward from cursor+1, then wrap from 1 to cursor
+  for offset = 1, total do
+    local idx = ((current_line - 1 + offset) % total) + 1
+    if lines[idx]:match('^%s*%- %[ %]') then
+      vim.api.nvim_win_set_cursor(state.win, { idx, 0 })
+      return
+    end
+  end
+
+  vim.notify("No unchecked todos", vim.log.levels.INFO)
+end
+
 -- Action handlers table (action name -> function)
 local actions = {
   close = function() M.close() end,
@@ -40,6 +66,7 @@ local actions = {
       hide_completed.toggle(state.buf)
     end
   end,
+  next_todo = function() jump_to_next_todo() end,
 }
 
 ---Format a key or key table for display in controls
@@ -104,6 +131,7 @@ local function build_controls()
     }},
     { header = "View", keys = {
       { key = fmt_key(km.toggle_completed), desc = "Hide/show completed" },
+      { key = fmt_key(km.next_todo), desc = "Jump to next todo" },
     }},
     { header = "Window", keys = {
       { key = fmt_key(km.close), desc = "Close" },

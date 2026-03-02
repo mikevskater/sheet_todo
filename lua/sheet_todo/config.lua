@@ -24,6 +24,7 @@ local defaults = {
     save = '<C-s>',
     revert = '<A-r>',
     toggle_completed = '<leader>h',
+    next_todo = 'n',
   },
 
   -- Behavior
