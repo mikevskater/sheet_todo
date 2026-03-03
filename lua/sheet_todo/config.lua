@@ -30,6 +30,9 @@ local defaults = {
   -- Completion
   disable_completion = true,  -- Disable autocomplete (blink.cmp / nvim-cmp) in notepad buffer
 
+  -- Folding
+  collapsible_headers = true,  -- Collapsible markdown headers via foldmethod=expr
+
   -- Behavior
   auto_refresh = false,  -- Auto-refresh todos periodically
   refresh_interval_ms = 30000,  -- 30 seconds

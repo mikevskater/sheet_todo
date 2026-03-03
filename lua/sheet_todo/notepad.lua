@@ -4,6 +4,7 @@ local M = {}
 local float_provider = require('sheet_todo.float_provider')
 local cfg = require('sheet_todo.config')
 local hide_completed = require('sheet_todo.features.hide_completed')
+local folding = require('sheet_todo.features.folding')
 
 -- State
 local state = {
@@ -133,6 +134,11 @@ local function build_controls()
       { key = fmt_key(km.toggle_completed), desc = "Hide/show completed" },
       { key = fmt_key(km.next_todo), desc = "Jump to next todo" },
     }},
+    { header = "Folding", keys = {
+      { key = "za", desc = "Toggle fold" },
+      { key = "zM", desc = "Close all folds" },
+      { key = "zR", desc = "Open all folds" },
+    }},
     { header = "Window", keys = {
       { key = fmt_key(km.close), desc = "Close" },
       { key = "?", desc = "Show controls" },
@@ -216,6 +222,9 @@ function M.create_float()
 
   -- Suppress autocomplete popups on notepad buffer
   disable_completion(buf)
+
+  -- Enable collapsible markdown headers
+  folding.setup(state.win, state.buf)
 
   -- Set up resize autocmd (raw mode only; nvim-float handles this internally)
   if not float_win then
