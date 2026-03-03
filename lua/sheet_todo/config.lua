@@ -37,7 +37,7 @@ local defaults = {
   sticky_headers = true,  -- Show ancestor headers at top of window when scrolled past
 
   -- Multi-panel (Phase 7)
-  multi_panel = false,          -- Enable left panel with group tabs (requires nvim-float)
+  multi_panel = true,          -- Enable left panel with group tabs (requires nvim-float)
   left_panel_width = 0.25,      -- Left panel width ratio
 
   -- Behavior

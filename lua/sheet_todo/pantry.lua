@@ -10,7 +10,7 @@ local _loaded_as_groups = false
 local _loaded_data = nil
 
 -- Base64 encode content to avoid JSON escape sequence issues
-local function encode_content(content)
+function M.encode_content(content)
   if not content or content == "" then
     return ""
   end
@@ -18,7 +18,7 @@ local function encode_content(content)
 end
 
 -- Base64 decode content back to original string
-local function decode_content(encoded)
+function M.decode_content(encoded)
   if not encoded or encoded == "" then
     return ""
   end
@@ -105,7 +105,7 @@ function M.get_content(callback)
 
       if active_group then
         callback(true, {
-          content = decode_content(active_group.content or ""),
+          content = M.decode_content(active_group.content or ""),
           cursor_pos = active_group.cursor_pos or { line = 1, col = 0 },
         })
       else
@@ -119,7 +119,7 @@ function M.get_content(callback)
       if not data.content then
         data.content = ""
       else
-        data.content = decode_content(data.content)
+        data.content = M.decode_content(data.content)
       end
       if not data.cursor_pos then
         data.cursor_pos = { line = 1, col = 0 }
@@ -149,7 +149,7 @@ function M.save_content(content, cursor_pos, callback)
     if data.groups then
       for _, g in ipairs(data.groups) do
         if g.name == active_name then
-          g.content = encode_content(content)
+          g.content = M.encode_content(content)
           g.cursor_pos = cursor_pos or { line = 1, col = 0 }
           break
         end
@@ -160,7 +160,7 @@ function M.save_content(content, cursor_pos, callback)
   else
     -- Old format: save as-is
     payload = {
-      content = encode_content(content),
+      content = M.encode_content(content),
       cursor_pos = cursor_pos or { line = 1, col = 0 },
       last_modified = os.time(),
     }

@@ -2,6 +2,8 @@
 -- Pure data logic: group CRUD, data normalization, per-group state
 local M = {}
 
+local pantry = require('sheet_todo.pantry')
+
 ---@class GroupEntry
 ---@field name string
 ---@field content string Decoded content string
@@ -67,11 +69,7 @@ function M.load(data)
 
   state.groups = {}
   for _, g in ipairs(normalized.groups) do
-    local decoded = ""
-    if g.content and g.content ~= "" then
-      local ok, result = pcall(vim.base64.decode, g.content)
-      decoded = ok and result or g.content
-    end
+    local decoded = pantry.decode_content(g.content)
     table.insert(state.groups, {
       name = g.name,
       content = decoded,
@@ -95,7 +93,7 @@ function M.serialize()
   for _, g in ipairs(state.groups) do
     table.insert(groups, {
       name = g.name,
-      content = vim.base64.encode(g.content or ""),
+      content = pantry.encode_content(g.content),
       cursor_pos = g.cursor_pos,
     })
   end
