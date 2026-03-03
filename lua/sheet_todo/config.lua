@@ -33,6 +33,9 @@ local defaults = {
   -- Folding
   collapsible_headers = true,  -- Collapsible markdown headers via foldmethod=expr
 
+  -- Sticky headers
+  sticky_headers = true,  -- Show ancestor headers at top of window when scrolled past
+
   -- Behavior
   auto_refresh = false,  -- Auto-refresh todos periodically
   refresh_interval_ms = 30000,  -- 30 seconds

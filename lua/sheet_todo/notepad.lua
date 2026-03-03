@@ -5,6 +5,7 @@ local float_provider = require('sheet_todo.float_provider')
 local cfg = require('sheet_todo.config')
 local hide_completed = require('sheet_todo.features.hide_completed')
 local folding = require('sheet_todo.features.folding')
+local sticky_headers = require('sheet_todo.features.sticky_headers')
 
 -- State
 local state = {
@@ -196,6 +197,7 @@ function M.create_float()
           state.unsaved_content = M.get_content()
         end
       end
+      sticky_headers.cleanup()
       hide_completed.reset()
       state.win = nil
       state.buf = nil
@@ -225,6 +227,9 @@ function M.create_float()
 
   -- Enable collapsible markdown headers
   folding.setup(state.win, state.buf)
+
+  -- Enable sticky header overlay
+  sticky_headers.setup(state.win, state.buf)
 
   -- Set up resize autocmd (raw mode only; nvim-float handles this internally)
   if not float_win then
@@ -323,6 +328,7 @@ function M.close()
     end
   end
 
+  sticky_headers.cleanup()
   hide_completed.reset()
   float_provider.close(state.win, state.float_win)
   state.win = nil
