@@ -140,6 +140,18 @@ local function build_controls()
   }
 end
 
+-- Disable autocomplete on the notepad buffer
+local function disable_completion(buf)
+  if not cfg.get('disable_completion') then
+    return
+  end
+  vim.b[buf].sheet_todo_buffer = true
+  vim.b[buf].completion = false -- blink.cmp
+  pcall(function()
+    require('cmp').setup.buffer({ enabled = false }) -- nvim-cmp
+  end)
+end
+
 -- Attach change tracking to the buffer
 local function attach_change_tracking(buf)
   vim.api.nvim_buf_attach(buf, false, {
@@ -201,6 +213,9 @@ function M.create_float()
 
   -- Track buffer changes to detect unsaved edits
   attach_change_tracking(buf)
+
+  -- Suppress autocomplete popups on notepad buffer
+  disable_completion(buf)
 
   -- Set up resize autocmd (raw mode only; nvim-float handles this internally)
   if not float_win then
