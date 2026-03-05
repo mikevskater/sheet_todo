@@ -40,6 +40,17 @@ local defaults = {
   multi_panel = true,          -- Enable left panel with group tabs (requires nvim-float)
   left_panel_width = 0.25,      -- Left panel width ratio
 
+  -- Group color presets (Phase 8)
+  group_color_presets = {
+    { name = "Red", color = "#E06C75" },
+    { name = "Green", color = "#98C379" },
+    { name = "Blue", color = "#61AFEF" },
+    { name = "Yellow", color = "#E5C07B" },
+    { name = "Purple", color = "#C678DD" },
+    { name = "Cyan", color = "#56B6C2" },
+    { name = "Orange", color = "#D19A66" },
+  },
+
   -- Behavior
   auto_refresh = false,  -- Auto-refresh todos periodically
   refresh_interval_ms = 30000,  -- 30 seconds
