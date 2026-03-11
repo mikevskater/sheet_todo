@@ -52,6 +52,9 @@ local defaults = {
     { name = "Orange", color = "#D19A66" },
   },
 
+  -- Storage limit
+  pantry_basket_limit_bytes = 1509949,  -- 1.44 MB per Pantry basket
+
   -- Behavior
   auto_refresh = false,  -- Auto-refresh todos periodically
   refresh_interval_ms = 30000,  -- 30 seconds

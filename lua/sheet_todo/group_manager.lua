@@ -12,6 +12,7 @@ local pantry = require('sheet_todo.pantry')
 ---@field icon string? Nerd Font char or emoji
 ---@field icon_color string? Hex color string
 ---@field name_color string? Hex color string
+---@field line_numbers boolean? Show line numbers for this group
 ---@field children GroupEntry[]? Sub-groups (nil = leaf)
 ---@field saved_content string? Content snapshot from last load/save (runtime only, not persisted)
 ---@field dirty boolean? True when content differs from saved_content (runtime only, not persisted)
@@ -27,11 +28,13 @@ local pantry = require('sheet_todo.pantry')
 ---@class GroupManagerState
 ---@field groups GroupEntry[]
 ---@field active_group string? Dot-separated path
+---@field expanded_paths string[]? Persisted expanded paths
 ---@field loaded boolean
 ---@field dirty boolean True when in-memory state differs from Pantry
 local state = {
   groups = {},
   active_group = nil,
+  expanded_paths = {},
   loaded = false,
   dirty = false,
 }
@@ -92,6 +95,7 @@ function M.normalize(raw_data)
 
   -- Already new format
   if raw_data.version == 2 then
+    raw_data.expanded_paths = raw_data.expanded_paths or {}
     return raw_data
   end
 
@@ -126,6 +130,7 @@ local function decode_group(raw)
     icon = raw.icon,
     icon_color = raw.icon_color,
     name_color = raw.name_color,
+    line_numbers = raw.line_numbers or nil,
     children = nil,
     saved_content = decoded,
     dirty = false,
@@ -158,6 +163,9 @@ local function encode_group(group)
   if group.name_color and group.name_color ~= "" then
     raw.name_color = group.name_color
   end
+  if group.line_numbers then
+    raw.line_numbers = true
+  end
   if group.children and #group.children > 0 then
     raw.children = {}
     for _, child in ipairs(group.children) do
@@ -187,6 +195,7 @@ function M.load(data)
     state.active_group = state.groups[1] and state.groups[1].name or nil
   end
 
+  state.expanded_paths = normalized.expanded_paths or {}
   state.loaded = true
   state.dirty = false
 end
@@ -199,10 +208,17 @@ function M.serialize()
     table.insert(groups, encode_group(g))
   end
 
+  local expanded = state.expanded_paths
+  -- Only include if non-empty
+  if expanded and #expanded == 0 then
+    expanded = nil
+  end
+
   return {
     version = 2,
     groups = groups,
     active_group = state.active_group,
+    expanded_paths = expanded,
     last_modified = os.time(),
   }
 end
@@ -429,6 +445,15 @@ function M.remove_group(path)
 
   table.remove(parent_list, idx)
 
+  -- Clean up expanded_paths for deleted subtree
+  local cleaned = {}
+  for _, p in ipairs(state.expanded_paths or {}) do
+    if p ~= path and not p:find("^" .. vim.pesc(path) .. "%.") then
+      table.insert(cleaned, p)
+    end
+  end
+  state.expanded_paths = cleaned
+
   -- If active group was the deleted path or a descendant, switch to first root
   if state.active_group then
     if state.active_group == path or state.active_group:find("^" .. vim.pesc(path) .. "%.") then
@@ -470,6 +495,19 @@ function M.rename_group(path, new_name)
   -- Compute new full path
   local parent = get_parent_path(path)
   local new_path = join_path(parent, new_name)
+
+  -- Update expanded_paths references
+  local new_expanded = {}
+  for _, p in ipairs(state.expanded_paths or {}) do
+    if p == path then
+      table.insert(new_expanded, new_path)
+    elseif p:find("^" .. vim.pesc(path) .. "%.") then
+      table.insert(new_expanded, new_path .. p:sub(#path + 1))
+    else
+      table.insert(new_expanded, p)
+    end
+  end
+  state.expanded_paths = new_expanded
 
   -- Update active_group reference if it matches or is a descendant
   if state.active_group then
@@ -532,6 +570,55 @@ function M.set_colors(path, icon_color, name_color)
 end
 
 -- ============================================================================
+-- EXPANDED STATE PERSISTENCE
+-- ============================================================================
+
+---Get the persisted expanded paths as a set (table<string, boolean>).
+---@return table<string, boolean>
+function M.get_expanded_paths()
+  local set = {}
+  for _, p in ipairs(state.expanded_paths or {}) do
+    set[p] = true
+  end
+  return set
+end
+
+---Set the expanded paths from a set (table<string, boolean>).
+---@param expanded_set table<string, boolean>
+function M.set_expanded_paths(expanded_set)
+  local paths = {}
+  for p, v in pairs(expanded_set) do
+    if v then
+      table.insert(paths, p)
+    end
+  end
+  state.expanded_paths = paths
+end
+
+-- ============================================================================
+-- PER-GROUP LINE NUMBERS
+-- ============================================================================
+
+---Get the active group's line_numbers setting.
+---@return boolean
+function M.get_active_line_numbers()
+  local g = M.find_group(state.active_group)
+  if g then
+    return g.line_numbers == true
+  end
+  return false
+end
+
+---Set the active group's line_numbers setting.
+---@param enabled boolean
+function M.set_active_line_numbers(enabled)
+  local g = M.find_group(state.active_group)
+  if g then
+    g.line_numbers = enabled or nil
+  end
+end
+
+-- ============================================================================
 -- PER-GROUP DIRTY QUERIES
 -- ============================================================================
 
@@ -588,6 +675,7 @@ end
 function M.reset()
   state.groups = {}
   state.active_group = nil
+  state.expanded_paths = {}
   state.loaded = false
   state.dirty = false
 end

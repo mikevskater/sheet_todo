@@ -92,6 +92,11 @@ function M.save()
   -- Serialize all groups and save
   local data = group_manager.serialize()
 
+  -- Compute payload size for display
+  local json_str = vim.json.encode(data)
+  local payload_bytes = #json_str
+  local limit_bytes = config.get('pantry_basket_limit_bytes')
+
   M.state.saving = true
   vim.notify("Saving to Pantry...", vim.log.levels.INFO)
 
@@ -99,7 +104,25 @@ function M.save()
     M.state.saving = false
 
     if success then
-      vim.notify("Saved successfully", vim.log.levels.INFO)
+      -- Show save size with colored percentage
+      local pct = (payload_bytes / limit_bytes) * 100
+      local size_kb = payload_bytes / 1024
+      local limit_kb = limit_bytes / 1024
+      local msg = string.format("Saved - %.1f KB / %.1f KB (%.1f%%)", size_kb, limit_kb, pct)
+
+      local hl
+      if pct < 50 then
+        hl = "DiagnosticOk"
+      elseif pct < 75 then
+        hl = "DiagnosticWarn"
+      elseif pct < 90 then
+        hl = "WarningMsg"
+      else
+        hl = "DiagnosticError"
+      end
+
+      vim.api.nvim_echo({ { msg, hl } }, true, {})
+
       M.state.last_error = nil
       multi_panel.mark_as_saved()
       group_manager.mark_as_saved()

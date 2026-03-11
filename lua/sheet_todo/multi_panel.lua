@@ -30,7 +30,6 @@ local state = {
 local PANEL_GROUPS = "groups"
 local PANEL_EDITOR = "editor"
 local unsaved_marker = "\u{25cf}"
-local line_numbers_visible = false
 
 -- ============================================================================
 -- TREE STATE (UI-only, not persisted)
@@ -169,6 +168,29 @@ local function render_left_panel(_mp_state)
 end
 
 -- ============================================================================
+-- SCROLLBAR SYNC
+-- ============================================================================
+
+---Sync the editor FloatWindow's .lines field and trigger scrollbar update.
+---@param lines string[]?
+local function sync_scrollbar(lines)
+  if not state.panel_state then return end
+  local editor_float = state.panel_state:get_panel_float(PANEL_EDITOR)
+  if not editor_float then return end
+
+  if lines then
+    editor_float.lines = lines
+  elseif state.right_buf and vim.api.nvim_buf_is_valid(state.right_buf) then
+    editor_float.lines = vim.api.nvim_buf_get_lines(state.right_buf, 0, -1, false)
+  end
+
+  local ok, Scrollbar = pcall(require, 'nvim-float.float.scrollbar')
+  if ok then
+    Scrollbar.update(editor_float)
+  end
+end
+
+-- ============================================================================
 -- RIGHT PANEL HELPERS
 -- ============================================================================
 
@@ -204,6 +226,9 @@ local function set_right_content(content)
   local lines = vim.split(content, "\n", { plain = true })
   vim.api.nvim_buf_set_lines(state.right_buf, 0, -1, false, lines)
   vim.api.nvim_buf_set_option(state.right_buf, 'modified', false)
+
+  -- Sync FloatWindow lines for scrollbar
+  sync_scrollbar(lines)
 
   state.saved_content = content
   state.has_unsaved_changes = false
@@ -317,6 +342,11 @@ local function switch_group(path)
   vim.schedule(function()
     set_right_cursor(group_manager.get_active_cursor())
   end)
+
+  -- Apply per-group line numbers
+  if state.right_win and vim.api.nvim_win_is_valid(state.right_win) then
+    vim.api.nvim_set_option_value('number', group_manager.get_active_line_numbers(), { win = state.right_win })
+  end
 
   -- Update right panel title (show leaf name)
   local parts = group_manager.split_path(path)
@@ -657,8 +687,9 @@ local function handle_toggle_line_numbers()
   if not state.right_win or not vim.api.nvim_win_is_valid(state.right_win) then
     return
   end
-  line_numbers_visible = not line_numbers_visible
-  vim.api.nvim_set_option_value('number', line_numbers_visible, { win = state.right_win })
+  local current = group_manager.get_active_line_numbers()
+  group_manager.set_active_line_numbers(not current)
+  vim.api.nvim_set_option_value('number', not current, { win = state.right_win })
 end
 
 -- ============================================================================
@@ -739,6 +770,7 @@ local function attach_change_tracking(buf)
       end
       vim.schedule(function()
         update_unsaved_state()
+        sync_scrollbar()
       end)
     end,
   })
@@ -765,8 +797,8 @@ function M.show(on_save_callback)
   state.saved_content = nil
   state.ignore_changes = false
 
-  -- Reset tree state
-  tree_state.expanded = {}
+  -- Restore tree state from group_manager (persisted expanded paths)
+  tree_state.expanded = group_manager.get_expanded_paths()
   tree_state.visible_nodes = {}
 
   local controls = build_controls()
@@ -819,8 +851,8 @@ function M.show(on_save_callback)
     vim.api.nvim_set_option_value('wrap', true, { win = state.right_win })
     vim.api.nvim_set_option_value('linebreak', true, { win = state.right_win })
 
-    -- Line numbers hidden by default
-    vim.api.nvim_set_option_value('number', false, { win = state.right_win })
+    -- Apply per-group line numbers (default off)
+    vim.api.nvim_set_option_value('number', group_manager.get_active_line_numbers(), { win = state.right_win })
 
     -- Change tracking
     attach_change_tracking(state.right_buf)
@@ -963,6 +995,9 @@ function M.cleanup()
     group_manager.set_active_cursor(get_right_cursor())
   end
 
+  -- Save expanded state to group_manager for persistence
+  group_manager.set_expanded_paths(tree_state.expanded)
+
   sticky_headers.cleanup()
   hide_completed.reset()
 
@@ -978,7 +1013,6 @@ function M.cleanup()
   tree_state.expanded = {}
   tree_state.visible_nodes = {}
   hl_cache = {}
-  line_numbers_visible = false
 end
 
 ---Close the multi-panel UI.

@@ -10,12 +10,16 @@ local cfg = require('sheet_todo.config')
 ---@field augroup number?
 ---@field notepad_win number?
 ---@field notepad_buf number?
+---@field _adjusting boolean Guard against recursive CursorMoved triggers
+---@field _overlay_height number Current overlay height (0 when hidden)
 local state = {
   overlay_win = nil,
   overlay_buf = nil,
   augroup = nil,
   notepad_win = nil,
   notepad_buf = nil,
+  _adjusting = false,
+  _overlay_height = 0,
 }
 
 ---Check if a line is a separator (3+ dashes)
@@ -36,17 +40,21 @@ local function get_header_level(line)
   return nil
 end
 
----Build the header stack by scanning upward from the first visible line.
----Returns a list of {level, text} from root to leaf (off-screen ancestor headers).
+---Build the header stack by scanning upward from the first truly visible line.
+---Headers within the overlay zone (behind the overlay) are included in the stack.
 ---@param bufnr number
 ---@param first_visible number 1-indexed first visible line
+---@param overlay_height number Current overlay height (lines covered by overlay)
 ---@return {level: number, text: string}[]
-local function build_header_stack(bufnr, first_visible)
+local function build_header_stack(bufnr, first_visible, overlay_height)
   local stack = {}
   local min_level = math.huge
 
-  -- Check if the first visible line is a header (visible, so don't include in overlay)
-  local lines = vim.api.nvim_buf_get_lines(bufnr, first_visible - 1, first_visible, false)
+  -- The first line NOT covered by the overlay
+  local first_uncovered = first_visible + overlay_height
+
+  -- If the first uncovered line is a header, set min_level so we don't duplicate it
+  local lines = vim.api.nvim_buf_get_lines(bufnr, first_uncovered - 1, first_uncovered, false)
   if lines[1] then
     local level = get_header_level(lines[1])
     if level then
@@ -54,8 +62,9 @@ local function build_header_stack(bufnr, first_visible)
     end
   end
 
-  -- Scan upward from line above first visible
-  for lnum = first_visible - 1, 1, -1 do
+  -- Scan upward from the line above the first uncovered line
+  -- This includes lines behind the overlay AND lines above first_visible
+  for lnum = first_uncovered - 1, 1, -1 do
     local line_tbl = vim.api.nvim_buf_get_lines(bufnr, lnum - 1, lnum, false)
     local line = line_tbl[1]
     if not line then break end
@@ -101,6 +110,7 @@ local function close_overlay()
     vim.api.nvim_buf_delete(state.overlay_buf, { force = true })
   end
   state.overlay_buf = nil
+  state._overlay_height = 0
 end
 
 ---Create or update the overlay window with the given header lines
@@ -134,6 +144,7 @@ local function show_overlay(header_lines)
   -- Create new overlay
   local buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, header_lines)
+  vim.bo[buf].filetype = 'markdown'
 
   local win = vim.api.nvim_open_win(buf, false, {
     relative = 'win',
@@ -178,7 +189,9 @@ local function update()
     return
   end
 
-  local stack = build_header_stack(notepad_buf, first_visible)
+  -- Build header stack using previous overlay height so headers behind
+  -- the overlay aren't prematurely removed
+  local stack = build_header_stack(notepad_buf, first_visible, state._overlay_height)
   if #stack == 0 then
     close_overlay()
     return
@@ -191,15 +204,57 @@ local function update()
     return
   end
 
+  -- Compute effective height
+  local height = math.min(#stack, max_height)
+
+  -- If height changed from previous, rebuild once to stabilize
+  if height ~= state._overlay_height then
+    stack = build_header_stack(notepad_buf, first_visible, height)
+    if #stack == 0 then
+      close_overlay()
+      return
+    end
+    max_height = get_max_overlay_height(notepad_buf, first_visible, #stack)
+    if max_height <= 0 then
+      close_overlay()
+      return
+    end
+    height = math.min(#stack, max_height)
+  end
+
   -- Trim stack from the front (remove deepest ancestors) to fit
   local header_lines = {}
-  local start_idx = #stack - max_height + 1
+  local start_idx = #stack - height + 1
   if start_idx < 1 then start_idx = 1 end
   for i = start_idx, #stack do
     table.insert(header_lines, stack[i].text)
   end
 
   show_overlay(header_lines)
+  state._overlay_height = #header_lines
+
+  -- Scroll view so cursor appears below the overlay (don't move the cursor itself)
+  if not state._adjusting and notepad_win == vim.api.nvim_get_current_win() then
+    -- winline() returns 1-based visual row accounting for word wrap
+    local visual_row = vim.api.nvim_win_call(notepad_win, function()
+      return vim.fn.winline()
+    end)
+    if visual_row <= #header_lines then
+      state._adjusting = true
+      -- Scroll viewport so cursor line starts just below the overlay
+      local cursor_line = vim.api.nvim_win_get_cursor(notepad_win)[1]
+      local new_topline = cursor_line - #header_lines
+      if new_topline < 1 then new_topline = 1 end
+      vim.api.nvim_win_call(notepad_win, function()
+        vim.fn.winrestview({ topline = new_topline })
+      end)
+      -- Clear on next schedule so the WinScrolled-triggered update
+      -- recalculates the overlay but skips cursor adjustment
+      vim.schedule(function()
+        state._adjusting = false
+      end)
+    end
+  end
 end
 
 ---Set up sticky headers for the notepad window.
@@ -237,6 +292,8 @@ function M.cleanup()
   state.augroup = nil
   state.notepad_win = nil
   state.notepad_buf = nil
+  state._adjusting = false
+  state._overlay_height = 0
 end
 
 return M
