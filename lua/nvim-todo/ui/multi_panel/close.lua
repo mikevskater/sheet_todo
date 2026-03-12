@@ -4,6 +4,7 @@ local M = {}
 local state = require('nvim-todo.ui.multi_panel.state')
 local right_buffer = require('nvim-todo.ui.panels.right.buffer')
 local active = require('nvim-todo.data.manager.active')
+local cursor = require('nvim-todo.data.group.cursor')
 local highlights = require('nvim-todo.ui.highlights')
 local sticky_headers = require('nvim-todo.features.sticky_headers')
 local hide_completed = require('nvim-todo.features.hide_completed')
@@ -14,7 +15,7 @@ function M.cleanup()
   if state.right_buf and vim.api.nvim_buf_is_valid(state.right_buf) then
     local full_content = right_buffer.get_full_content()
     active.set_active_content(full_content)
-    active.set_active_cursor(right_buffer.get_cursor())
+    cursor.set_active_cursor(right_buffer.get_cursor())
   end
 
   -- Save expanded state for persistence

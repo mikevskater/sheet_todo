@@ -6,6 +6,7 @@ local right_buffer = require('nvim-todo.ui.panels.right.buffer')
 local tree_state = require('nvim-todo.ui.panels.left.tree_state')
 local statuscolumn = require('nvim-todo.ui.multi_panel.statuscolumn')
 local active = require('nvim-todo.data.manager.active')
+local cursor = require('nvim-todo.data.group.cursor')
 local path_utils = require('nvim-todo.data.group.path')
 local hide_completed = require('nvim-todo.features.hide_completed')
 
@@ -19,7 +20,7 @@ function M.switch_group(path)
   local full_content = right_buffer.get_full_content()
   hide_completed.reset()
   active.set_active_content(full_content)
-  active.set_active_cursor(right_buffer.get_cursor())
+  cursor.set_active_cursor(right_buffer.get_cursor())
 
   -- Switch active group
   active.set_active_group(path)
@@ -29,7 +30,7 @@ function M.switch_group(path)
 
   -- Restore cursor
   vim.schedule(function()
-    right_buffer.set_cursor(active.get_active_cursor())
+    right_buffer.set_cursor(cursor.get_active_cursor())
   end)
 
   -- Apply per-group line numbers, match global relativenumber
