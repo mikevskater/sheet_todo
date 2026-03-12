@@ -159,8 +159,6 @@ local function show_overlay(header_lines)
     noautocmd = true,
   })
 
-  vim.api.nvim_set_option_value('winhighlight', 'Normal:SheetTodoStickyHeader', { win = win })
-
   state.overlay_buf = buf
   state.overlay_win = win
 end
@@ -264,9 +262,6 @@ function M.setup(winid, bufnr)
   if not cfg.get('sticky_headers') then
     return
   end
-
-  -- Define highlight group
-  vim.api.nvim_set_hl(0, 'SheetTodoStickyHeader', { default = true, link = 'CursorLine' })
 
   state.notepad_win = winid
   state.notepad_buf = bufnr

@@ -1009,8 +1009,19 @@ function M.show(on_save_callback)
   for _, key in ipairs(close_keys) do
     shared_keymaps[key] = handle_close
   end
-  shared_keymaps['<Tab>'] = function() panel_state:focus_next_panel() end
-  shared_keymaps['<S-Tab>'] = function() panel_state:focus_prev_panel() end
+  -- Use explicit toggle instead of focus_next/prev so mouse clicks don't desync
+  local function toggle_panel_focus()
+    local cur_win = vim.api.nvim_get_current_win()
+    local groups_win = panel_state:get_panel_window(PANEL_GROUPS)
+    local editor_win = panel_state:get_panel_window(PANEL_EDITOR)
+    if cur_win == groups_win then
+      panel_state:focus_panel(PANEL_EDITOR)
+    else
+      panel_state:focus_panel(PANEL_GROUPS)
+    end
+  end
+  shared_keymaps['<Tab>'] = toggle_panel_focus
+  shared_keymaps['<S-Tab>'] = toggle_panel_focus
   panel_state:set_keymaps(shared_keymaps)
 
   -- Set up left panel keymaps
@@ -1054,6 +1065,11 @@ function M.show(on_save_callback)
   local checkbox_key = km.toggle_checkbox
   if type(checkbox_key) == 'table' then checkbox_key = checkbox_key[1] end
   right_keymaps[checkbox_key] = handle_toggle_checkbox
+
+  -- Custom fold keymaps (manual fold management)
+  right_keymaps['za'] = function() folding.toggle_fold() end
+  right_keymaps['zM'] = function() folding.close_all_folds() end
+  right_keymaps['zR'] = function() folding.open_all_folds() end
 
   panel_state:set_panel_keymaps(PANEL_EDITOR, right_keymaps)
 
