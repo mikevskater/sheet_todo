@@ -23,6 +23,7 @@ M.get_active_group = active.get_active_group
 M.set_active_group = active.set_active_group
 M.get_active_content = active.get_active_content
 M.set_active_content = active.set_active_content
+M.get_active_saved_content = active.get_active_saved_content
 M.get_root_groups = active.get_root_groups
 M.get_expanded_paths = active.get_expanded_paths
 M.set_expanded_paths = active.set_expanded_paths

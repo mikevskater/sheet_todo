@@ -44,6 +44,16 @@ function M.set_active_content(content)
   end
 end
 
+---Get the active group's last-saved content (Pantry snapshot).
+---@return string?
+function M.get_active_saved_content()
+  local g = tree.find_group(state.active_group)
+  if g then
+    return g.saved_content
+  end
+  return nil
+end
+
 ---Get the root-level groups array.
 ---@return GroupEntry[]
 function M.get_root_groups()

@@ -3,11 +3,18 @@ local M = {}
 
 local state = require('nvim-todo.ui.multi_panel.state')
 local path_utils = require('nvim-todo.data.group.path')
+local active = require('nvim-todo.data.manager.active')
+
+---Sync current expanded set to the data layer for persistence.
+local function sync_to_data()
+  active.set_expanded_paths(state.tree_state.expanded)
+end
 
 ---Expand a tree node by path.
 ---@param path string
 function M.expand(path)
   state.tree_state.expanded[path] = true
+  sync_to_data()
 end
 
 ---Collapse a node and all its descendants.
@@ -20,6 +27,7 @@ function M.collapse(path)
       state.tree_state.expanded[p] = nil
     end
   end
+  sync_to_data()
 end
 
 ---Move cursor to the row matching the given path in visible_nodes.
@@ -70,6 +78,7 @@ function M.remap_expanded_paths(old_prefix, new_prefix)
     end
   end
   state.tree_state.expanded = new_expanded
+  sync_to_data()
 end
 
 ---Find parent node row and set cursor there.

@@ -99,13 +99,16 @@ function M.render_groups()
   end
 end
 
----Update the right panel title with active group name.
+---Update the right panel title with active group name (includes unsaved marker if dirty).
 function M.update_editor_title()
   if state.panel_state then
     local name = active.get_active_group() or "Editor"
     local parts = path_utils.split_path(name)
     local display_name = parts[#parts] or name
-    state.panel_state:update_panel_title(state.PANEL_EDITOR, " " .. display_name .. " ")
+    local title = state.has_unsaved_changes
+      and (state.unsaved_marker .. " " .. display_name .. " ")
+      or (" " .. display_name .. " ")
+    state.panel_state:update_panel_title(state.PANEL_EDITOR, title)
   end
 end
 

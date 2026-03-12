@@ -7,6 +7,7 @@ local pantry = require('nvim-todo.storage.pantry')
 local manager = require('nvim-todo.data.manager')
 local cursor = require('nvim-todo.data.group.cursor')
 local multi_panel = require('nvim-todo.ui.multi_panel')
+local ui_state = require('nvim-todo.ui.multi_panel.state')
 local plugin = require('nvim-todo.plugin')
 
 ---Open the notepad (always multi-panel).
@@ -25,6 +26,14 @@ function M.show()
     vim.schedule(function()
       multi_panel.set_cursor(cursor.get_active_cursor())
     end)
+
+    -- Override saved_content baseline with Pantry snapshot so unsaved detection works
+    local pantry_snapshot = manager.get_active_saved_content()
+    if pantry_snapshot then
+      ui_state.saved_content = pantry_snapshot
+      ui_state.has_unsaved_changes = (manager.get_active_content() ~= pantry_snapshot)
+    end
+
     multi_panel.render_groups()
     multi_panel.update_editor_title()
     vim.notify("Restored unsaved changes", vim.log.levels.INFO)
