@@ -789,6 +789,31 @@ local function handle_toggle_line_numbers()
   apply_statuscolumn()
 end
 
+local function handle_toggle_checkbox()
+  if not state.right_buf or not vim.api.nvim_buf_is_valid(state.right_buf) then
+    return
+  end
+  if not state.right_win or not vim.api.nvim_win_is_valid(state.right_win) then
+    return
+  end
+
+  local cursor = vim.api.nvim_win_get_cursor(state.right_win)
+  local lnum = cursor[1]
+  local line = vim.api.nvim_buf_get_lines(state.right_buf, lnum - 1, lnum, false)[1]
+  if not line then return end
+
+  local new_line
+  if line:match('%- %[ %]') then
+    new_line = line:gsub('%- %[ %]', '- [x]', 1)
+  elseif line:match('%- %[x%]') then
+    new_line = line:gsub('%- %[x%]', '- [ ]', 1)
+  else
+    return
+  end
+
+  vim.api.nvim_buf_set_lines(state.right_buf, lnum - 1, lnum, false, { new_line })
+end
+
 -- ============================================================================
 -- CONTROLS
 -- ============================================================================
@@ -826,6 +851,7 @@ local function build_controls()
     { header = "View", keys = {
       { key = fmt_key(km.toggle_completed), desc = "Hide/show completed" },
       { key = fmt_key(km.next_todo), desc = "Jump to next todo" },
+      { key = fmt_key(km.toggle_checkbox), desc = "Toggle [ ]/[x] checkbox" },
       { key = fmt_key(km.toggle_line_numbers), desc = "Toggle line numbers" },
     }},
     { header = "Folding", keys = {
@@ -1017,6 +1043,10 @@ function M.show(on_save_callback)
   local line_num_key = km.toggle_line_numbers
   if type(line_num_key) == 'table' then line_num_key = line_num_key[1] end
   right_keymaps[line_num_key] = handle_toggle_line_numbers
+
+  local checkbox_key = km.toggle_checkbox
+  if type(checkbox_key) == 'table' then checkbox_key = checkbox_key[1] end
+  right_keymaps[checkbox_key] = handle_toggle_checkbox
 
   panel_state:set_panel_keymaps(PANEL_EDITOR, right_keymaps)
 

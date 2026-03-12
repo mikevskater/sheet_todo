@@ -26,6 +26,7 @@ local defaults = {
     toggle_completed = '<leader>h',
     next_todo = 'n',
     toggle_line_numbers = '<leader>l',
+    toggle_checkbox = '<C-t>',
   },
 
   -- Completion
