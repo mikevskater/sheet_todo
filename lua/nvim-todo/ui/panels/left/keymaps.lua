@@ -7,6 +7,7 @@ local sync = require('nvim-todo.ui.multi_panel.sync')
 local right_buffer = require('nvim-todo.ui.panels.right.buffer')
 local crud = require('nvim-todo.data.group.crud')
 local active = require('nvim-todo.data.manager.active')
+local cursor = require('nvim-todo.data.group.cursor')
 local path_utils = require('nvim-todo.data.group.path')
 local config = require('nvim-todo.config')
 
@@ -99,7 +100,7 @@ function M.handle_delete_group()
         if was_under then
           right_buffer.set_content(active.get_active_content())
           vim.schedule(function()
-            right_buffer.set_cursor(active.get_active_cursor())
+            right_buffer.set_cursor(cursor.get_active_cursor())
           end)
           local new_name = active.get_active_group() or "Editor"
           local parts = path_utils.split_path(new_name)
