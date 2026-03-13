@@ -89,6 +89,8 @@ function M.set_cursor(pos)
   local total = vim.api.nvim_buf_line_count(state.right_buf)
   local line = math.max(1, math.min(pos.line or 1, total))
   vim.api.nvim_win_set_cursor(state.right_win, { line, pos.col or 0 })
+  -- Scroll so cursor line sits at the bottom of the window
+  vim.api.nvim_win_call(state.right_win, function() vim.cmd('normal! zb') end)
 end
 
 return M

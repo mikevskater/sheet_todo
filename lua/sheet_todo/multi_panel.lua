@@ -456,6 +456,15 @@ local function handle_collapse()
   end
 end
 
+---Restore focus to the left (groups) panel after a dialog closes.
+local function refocus_left()
+  vim.schedule(function()
+    if state.panel_state then
+      state.panel_state:focus_panel(PANEL_GROUPS)
+    end
+  end)
+end
+
 local function handle_add_child_group()
   local path = get_group_under_cursor()
   if not path then
@@ -464,7 +473,7 @@ local function handle_add_child_group()
   end
 
   vim.ui.input({ prompt = "New sub-group name: " }, function(name)
-    if not name or name == "" then return end
+    if not name or name == "" then refocus_left(); return end
     vim.schedule(function()
       if group_manager.add_group(path, name) then
         -- Auto-expand parent so the new child is visible
@@ -472,8 +481,10 @@ local function handle_add_child_group()
           tree_state.expanded[path] = true
         end
         state.panel_state:render_panel(PANEL_GROUPS)
+        state.panel_state:focus_panel(PANEL_GROUPS)
         vim.notify("Group '" .. name .. "' added", vim.log.levels.INFO)
       else
+        state.panel_state:focus_panel(PANEL_GROUPS)
         vim.notify("Failed to add group (duplicate name or invalid)", vim.log.levels.WARN)
       end
     end)
@@ -482,12 +493,14 @@ end
 
 local function handle_add_root_group()
   vim.ui.input({ prompt = "New root group name: " }, function(name)
-    if not name or name == "" then return end
+    if not name or name == "" then refocus_left(); return end
     vim.schedule(function()
       if group_manager.add_group("", name) then
         state.panel_state:render_panel(PANEL_GROUPS)
+        state.panel_state:focus_panel(PANEL_GROUPS)
         vim.notify("Group '" .. name .. "' added", vim.log.levels.INFO)
       else
+        state.panel_state:focus_panel(PANEL_GROUPS)
         vim.notify("Group '" .. name .. "' already exists", vim.log.levels.WARN)
       end
     end)
@@ -508,7 +521,7 @@ local function handle_delete_group()
   msg = msg .. "? (y/n): "
 
   vim.ui.input({ prompt = msg }, function(answer)
-    if answer ~= "y" and answer ~= "Y" then return end
+    if answer ~= "y" and answer ~= "Y" then refocus_left(); return end
     vim.schedule(function()
       local was_active = group_manager.get_active_group()
       local was_under = was_active == path
@@ -535,8 +548,10 @@ local function handle_delete_group()
           state.panel_state:update_panel_title(PANEL_EDITOR, " " .. (parts[#parts] or new_name) .. " ")
         end
         state.panel_state:render_panel(PANEL_GROUPS)
+        state.panel_state:focus_panel(PANEL_GROUPS)
         vim.notify("Group '" .. path .. "' deleted", vim.log.levels.INFO)
       else
+        state.panel_state:focus_panel(PANEL_GROUPS)
         vim.notify("Cannot delete the last group", vim.log.levels.WARN)
       end
     end)
@@ -549,7 +564,7 @@ local function handle_rename_group()
   local path = node.path
 
   vim.ui.input({ prompt = "Rename '" .. node.name .. "' to: ", default = node.name }, function(new_name)
-    if not new_name or new_name == "" or new_name == node.name then return end
+    if not new_name or new_name == "" or new_name == node.name then refocus_left(); return end
     vim.schedule(function()
       local ok, new_path = group_manager.rename_group(path, new_name)
       if ok then
@@ -569,6 +584,7 @@ local function handle_rename_group()
         end
 
         state.panel_state:render_panel(PANEL_GROUPS)
+        state.panel_state:focus_panel(PANEL_GROUPS)
         -- Update right panel title if this was the active group
         local active = group_manager.get_active_group()
         if active then
@@ -577,6 +593,7 @@ local function handle_rename_group()
         end
         vim.notify("Renamed to '" .. new_name .. "'", vim.log.levels.INFO)
       else
+        state.panel_state:focus_panel(PANEL_GROUPS)
         vim.notify("Rename failed (duplicate name or invalid)", vim.log.levels.WARN)
       end
     end)
@@ -588,10 +605,11 @@ local function handle_set_icon()
   if not path then return end
 
   vim.ui.input({ prompt = "Icon (Nerd Font/emoji, empty to clear): " }, function(icon)
-    if icon == nil then return end  -- cancelled
+    if icon == nil then refocus_left(); return end  -- cancelled
     vim.schedule(function()
       group_manager.set_icon(path, icon)
       state.panel_state:render_panel(PANEL_GROUPS)
+      state.panel_state:focus_panel(PANEL_GROUPS)
     end)
   end)
 end
@@ -608,7 +626,7 @@ local function pick_color_fallback(path)
   table.insert(items, "Clear color")
 
   vim.ui.select(items, { prompt = "Pick a color:" }, function(choice, idx)
-    if not choice then return end
+    if not choice then refocus_left(); return end
     vim.schedule(function()
       if choice == "Clear color" then
         group_manager.set_colors(path, nil, nil)
@@ -616,7 +634,7 @@ local function pick_color_fallback(path)
         state.panel_state:focus_panel(PANEL_GROUPS)
       elseif choice == "Custom hex..." then
         vim.ui.input({ prompt = "Hex color (e.g. #FF5733): " }, function(hex)
-          if not hex or hex == "" then return end
+          if not hex or hex == "" then refocus_left(); return end
           vim.schedule(function()
             group_manager.set_colors(path, hex, hex)
             state.panel_state:render_panel(PANEL_GROUPS)
@@ -712,7 +730,7 @@ local function handle_reparent()
   end
 
   vim.ui.select(labels, { prompt = "Move '" .. node.name .. "' to:" }, function(choice, idx)
-    if not choice or not idx then return end
+    if not choice or not idx then refocus_left(); return end
     vim.schedule(function()
       local target = targets[idx]
       local ok, new_path = group_manager.reparent_group(path, target.path)
@@ -736,6 +754,7 @@ local function handle_reparent()
         end
 
         state.panel_state:render_panel(PANEL_GROUPS)
+        state.panel_state:focus_panel(PANEL_GROUPS)
 
         -- Place cursor on moved group
         cursor_follow_path(new_path)
@@ -749,6 +768,7 @@ local function handle_reparent()
 
         vim.notify("Moved '" .. node.name .. "' to " .. (target.path == "" and "root" or target.path), vim.log.levels.INFO)
       else
+        state.panel_state:focus_panel(PANEL_GROUPS)
         vim.notify("Move failed (duplicate name or invalid destination)", vim.log.levels.WARN)
       end
     end)
