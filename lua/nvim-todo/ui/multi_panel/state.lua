@@ -3,6 +3,7 @@
 
 ---@class MultiPanelState
 ---@field panel_state table? MultiPanelState from nvim-float
+---@field left_buf number?
 ---@field right_buf number?
 ---@field right_win number?
 ---@field saved_content string? Last saved content (for unsaved detection)
@@ -22,6 +23,7 @@ local unsaved_marker = "\u{25cf}"
 ---@type MultiPanelState
 local state = {
   panel_state = nil,
+  left_buf = nil,
   right_buf = nil,
   right_win = nil,
   saved_content = nil,
@@ -37,6 +39,7 @@ local state = {
 ---Reset all UI state to defaults.
 function state.reset()
   state.panel_state = nil
+  state.left_buf = nil
   state.right_buf = nil
   state.right_win = nil
   state.saved_content = nil

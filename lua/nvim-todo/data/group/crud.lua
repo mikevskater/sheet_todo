@@ -63,13 +63,24 @@ function M.add_group(parent_path, name)
     end
   end
 
-  table.insert(target_list, {
+  local new_entry = {
     name = name,
     content = "",
     cursor_pos = { line = 1, col = 0 },
     saved_content = "",
     dirty = false,
-  })
+  }
+
+  -- Inherit parent colors
+  if parent_path ~= "" then
+    local parent = tree.find_group(parent_path)
+    if parent then
+      new_entry.icon_color = parent.icon_color
+      new_entry.name_color = parent.name_color
+    end
+  end
+
+  table.insert(target_list, new_entry)
   return true
 end
 

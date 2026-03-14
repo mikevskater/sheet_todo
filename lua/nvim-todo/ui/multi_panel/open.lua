@@ -49,6 +49,7 @@ function M.show(on_save_callback)
           title = " Groups ",
           ratio = config.get('left_panel_width'),
           on_render = left_render.render,
+          cursorline = false,
         },
         {
           name = state.PANEL_EDITOR,
@@ -77,6 +78,7 @@ function M.show(on_save_callback)
   end
 
   state.panel_state = panel_state
+  state.left_buf = panel_state:get_panel_buffer(state.PANEL_GROUPS)
   state.right_buf = panel_state:get_panel_buffer(state.PANEL_EDITOR)
   state.right_win = panel_state:get_panel_window(state.PANEL_EDITOR)
 
@@ -137,6 +139,7 @@ function M.show(on_save_callback)
     ['J'] = left_keymaps.handle_reorder_down,
     ['K'] = left_keymaps.handle_reorder_up,
     ['m'] = left_keymaps.handle_reparent,
+    ['<2-LeftMouse>'] = left_keymaps.handle_select_group,
   })
 
   -- Right panel keymaps

@@ -14,13 +14,49 @@ function M.handle_save()
 end
 
 function M.handle_revert()
-  if not state.saved_content then
-    vim.notify("No saved content to revert to", vim.log.levels.WARN)
+  local store = require('nvim-todo.state.store')
+  local pantry = require('nvim-todo.storage.pantry.client')
+  local manager = require('nvim-todo.data.manager')
+  local cursor_mod = require('nvim-todo.data.group.cursor')
+  local sync = require('nvim-todo.ui.multi_panel.sync')
+
+  if store.loading then
+    vim.notify("Already loading...", vim.log.levels.WARN)
     return
   end
-  hide_completed.reset()
-  right_buffer.set_content(state.saved_content)
-  vim.notify("Reverted to last saved content", vim.log.levels.INFO)
+
+  store.loading = true
+  vim.notify("Refreshing from cloud...", vim.log.levels.INFO)
+
+  pantry.get_raw_data(function(success, data, err)
+    store.loading = false
+    if not success then
+      vim.notify("Refresh failed: " .. (err or "unknown"), vim.log.levels.ERROR)
+      return
+    end
+
+    vim.schedule(function()
+      hide_completed.reset()
+      manager.load(data)
+
+      -- Restore UI tree state
+      state.tree_state.expanded = manager.get_expanded_paths()
+
+      -- Load active group content into editor
+      right_buffer.set_content(manager.get_active_content())
+      state.saved_content = manager.get_active_content()
+      state.has_unsaved_changes = false
+
+      vim.schedule(function()
+        right_buffer.set_cursor(cursor_mod.get_active_cursor())
+      end)
+
+      sync.render_groups()
+      sync.update_editor_title()
+
+      vim.notify("Refreshed from cloud (" .. manager.get_group_count() .. " groups)", vim.log.levels.INFO)
+    end)
+  end)
 end
 
 function M.handle_toggle_completed()
