@@ -7,6 +7,7 @@ local url = require('nvim-todo.storage.pantry.url')
 
 M.get_raw_data = client.get_raw_data
 M.save_raw_data = client.save_raw_data
+M.replace_raw_data = client.replace_raw_data
 M.encode_content = codec.encode_content
 M.decode_content = codec.decode_content
 M.is_configured = url.is_configured

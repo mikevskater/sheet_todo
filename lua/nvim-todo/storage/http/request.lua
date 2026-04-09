@@ -78,25 +78,30 @@ function M.request(method, url, data, headers, callback)
   local stdout_data = {}
   local stderr_data = {}
 
+  -- Append a chunk of jobstart "lines" to `buf`, honoring the rule from
+  -- `:h channel-lines`: the first item of every subsequent on_stdout/on_stderr
+  -- invocation is a *continuation* of the previous chunk's last line, not a
+  -- new line. Joining with "\n" unconditionally (as the old code did) splices
+  -- stray newlines into the middle of tokens when a buffer boundary falls
+  -- mid-line, which can corrupt JSON keys/values.
+  local function append_chunk(buf, recv_data)
+    if not recv_data or #recv_data == 0 then return end
+    for i, line in ipairs(recv_data) do
+      if i == 1 and #buf > 0 then
+        buf[#buf] = buf[#buf] .. line
+      else
+        table.insert(buf, line)
+      end
+    end
+  end
+
   local job_opts = {
     stdin = request_body and 'pipe' or nil,
     on_stdout = function(_, recv_data, _)
-      if recv_data then
-        for _, line in ipairs(recv_data) do
-          if line ~= "" then
-            table.insert(stdout_data, line)
-          end
-        end
-      end
+      append_chunk(stdout_data, recv_data)
     end,
     on_stderr = function(_, recv_data, _)
-      if recv_data then
-        for _, line in ipairs(recv_data) do
-          if line ~= "" then
-            table.insert(stderr_data, line)
-          end
-        end
-      end
+      append_chunk(stderr_data, recv_data)
     end,
     on_exit = function(_, exit_code, _)
       vim.schedule(function()

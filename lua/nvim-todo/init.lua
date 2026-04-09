@@ -96,7 +96,7 @@ function M.save()
   store.saving = true
   vim.notify("Saving to Pantry...", vim.log.levels.INFO)
 
-  pantry.save_raw_data(data, function(success, err)
+  pantry.replace_raw_data(data, function(success, err)
     store.saving = false
 
     if success then
@@ -137,6 +137,24 @@ end
 function M.discard()
   manager.reset()
   vim.notify("Unsaved changes discarded. Next open will fetch from Pantry.", vim.log.levels.INFO)
+end
+
+---Reset in-memory state and re-fetch from Pantry.
+---Unlike :TodoShow (which reuses the loaded state forever within a session),
+---this forces a fresh load. Use when the tree looks wrong or a transient load
+---error got cached in memory.
+---Any unsaved changes will be lost.
+function M.reload()
+  local was_open = multi_panel.is_open()
+  if was_open then
+    multi_panel.close()
+  end
+  manager.reset()
+  if was_open then
+    M.show()
+  else
+    vim.notify("Notepad state cleared. Next :TodoShow will fetch from Pantry.", vim.log.levels.INFO)
+  end
 end
 
 ---Show status info in a split buffer.
